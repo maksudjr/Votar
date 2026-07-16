@@ -1,0 +1,6 @@
+{
+  "name": "Voter Search BD",
+  "description": "A modern web application for searching and managing voter lists in Bangladesh. It features automated PDF-to-Database parsing via Gemini AI, robust search filters, an admin dashboard, export tools, and secure backups.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
