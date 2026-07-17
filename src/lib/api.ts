@@ -4,6 +4,19 @@ import { localDb } from "./localDb";
 // System mode state
 let isOfflineMode = localStorage.getItem("system_offline_mode") === "true";
 
+// Attempt to recover online mode immediately on load if possible
+if (isOfflineMode) {
+  fetch("/api/voters/areas")
+    .then(res => {
+      if (res.ok) {
+        isOfflineMode = false;
+        localStorage.setItem("system_offline_mode", "false");
+        console.log("Server detected online. Standalone mode automatically disabled.");
+      }
+    })
+    .catch(() => {});
+}
+
 export function getIsOfflineMode(): boolean {
   return isOfflineMode;
 }

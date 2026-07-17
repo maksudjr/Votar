@@ -42,7 +42,18 @@ export default function App() {
 
   // Check existing session on mount
   useEffect(() => {
-    const verifySession = async () => {
+    const checkServerAndSession = async () => {
+      // 1. Probe if server is online to automatically disable offline mode
+      try {
+        const probe = await fetch("/api/voters/areas");
+        if (probe.ok) {
+          api.setIsOfflineMode(false);
+          setIsOffline(false);
+        }
+      } catch (err) {
+        console.warn("Server probe failed, keeping offline mode status", err);
+      }
+
       const token = localStorage.getItem("admin_token");
       if (!token) {
         setIsVerifyingSession(false);
@@ -69,7 +80,7 @@ export default function App() {
       }
     };
 
-    verifySession();
+    checkServerAndSession();
   }, []);
 
   // Fetch unique voter areas

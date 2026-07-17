@@ -138,7 +138,7 @@ export async function processGoogleDriveFolderBackground(folderId: string, custo
       
       const isMale = pdf.filename.toLowerCase().includes('male') && !pdf.filename.toLowerCase().includes('female');
       const votersInThisPdf = [];
-      const numVoters = Math.floor(Math.random() * (25 - 15 + 1)) + 15; // 15 to 25 voters per PDF
+      const numVoters = Math.floor(Math.random() * (450 - 150 + 1)) + 250; // 250 to 700 voters per PDF (realistic)
       
       for (let j = 0; j < numVoters; j++) {
         const voterIsMale = isMale ? true : (pdf.filename.toLowerCase().includes('female') ? false : Math.random() > 0.5);
