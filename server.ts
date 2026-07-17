@@ -22,6 +22,7 @@ import {
   restoreDatabase
 } from "./src/server/db";
 import { extractVotersFromPDF } from "./src/server/gemini";
+import { processGoogleDriveFolderBackground } from "./src/server/driveFolderScanner";
 
 const app = express();
 const PORT = 3000;
@@ -293,6 +294,37 @@ app.post("/api/pdfs/link", requireAdmin, async (req, res) => {
     }
     if (!areaName) {
       return res.status(400).json({ error: "Area Name is required." });
+    }
+    
+    // Detect Google Drive Folder Link
+    let isFolder = false;
+    let folderId = "";
+    try {
+      const urlObj = new URL(url);
+      if (urlObj.hostname.includes("drive.google.com")) {
+        const folderMatch = urlObj.pathname.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+        if (folderMatch && folderMatch[1]) {
+          isFolder = true;
+          folderId = folderMatch[1];
+        }
+      }
+    } catch (_) {}
+
+    if (isFolder) {
+      // Trigger background processing for the Google Drive folder tree
+      processGoogleDriveFolderBackground(folderId, areaName);
+      
+      return res.status(202).json({
+        message: "গুগল ড্রাইভ ফোল্ডার লিংক সনাক্ত করা হয়েছে! ব্যাকগ্রাউন্ডে ফোল্ডারের ভেতরের সকল পিডিএফ এবং সাবফোল্ডার স্ক্যান করে প্রসেস করা হচ্ছে।",
+        pdf: {
+          id: folderId,
+          filename: `ফোল্ডার: ${areaName}`,
+          sourceType: "link",
+          status: "processing",
+          votersCount: 0,
+          createdAt: new Date().toISOString()
+        }
+      });
     }
     
     // Try to infer a nice filename from the URL

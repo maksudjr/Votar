@@ -412,96 +412,69 @@ export default function AdminPanel({ token, onLogout, onRefreshAreas }: AdminPan
               </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* File drag-drop panel */}
-              <form onSubmit={handleFileUploadSubmit} className="space-y-3">
-                <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">পদ্ধতি ১: ফাইল আপলোড (File Upload)</span>
-                <div
-                  onDragEnter={handleDrag}
-                  onDragOver={handleDrag}
-                  onDragLeave={handleDrag}
-                  onDrop={handleDrop}
-                  className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all flex flex-col items-center justify-center min-h-[140px] ${
-                    dragActive
-                      ? "border-bd-green-600 bg-bd-green-50"
-                      : fileToUpload
-                      ? "border-bd-green-500 bg-bd-green-50/10"
-                      : "border-gray-200 hover:border-bd-green-500/50 hover:bg-gray-50/30"
-                  }`}
-                  onClick={() => document.getElementById("file-picker")?.click()}
-                >
-                  <input
-                    id="file-picker"
-                    type="file"
-                    accept="application/pdf"
-                    className="hidden"
-                    onChange={(e) => {
-                      if (e.target.files && e.target.files[0]) {
-                        setFileToUpload(e.target.files[0]);
-                      }
-                    }}
-                  />
-                  <UploadCloud className={`w-8 h-8 mb-2 ${fileToUpload ? "text-bd-green-600" : "text-gray-400"}`} />
-                  {fileToUpload ? (
-                    <div>
-                      <p className="text-sm font-semibold text-gray-800">{fileToUpload.name}</p>
-                      <p className="text-xs text-gray-500 mt-1">{(fileToUpload.size / (1024 * 1024)).toFixed(2)} MB</p>
+            <div className="bg-gray-50/50 border border-gray-200 rounded-2xl p-6 space-y-4">
+              <form onSubmit={handleUrlSubmit} className="space-y-4">
+                <div>
+                  <span className="text-xs font-bold text-bd-green-700 bg-bd-green-50 px-2 py-0.5 rounded uppercase tracking-wider font-display">
+                    গুগল ড্রাইভ বা ওয়েব লিংক থেকে সরাসরি ভোটার তালিকা যোগ করুন
+                  </span>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-gray-600">গুগল ড্রাইভ লিংক (ফাইল অথবা ফোল্ডার)</label>
+                      <div className="relative">
+                        <Link className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                          type="url"
+                          placeholder="https://drive.google.com/drive/folders/... অথবা /file/d/..."
+                          value={pdfUrl}
+                          onChange={(e) => setPdfUrl(e.target.value)}
+                          className="w-full pl-9 pr-3 py-2.5 border border-gray-200 focus:border-bd-green-600 focus:ring-1 focus:ring-bd-green-600 rounded-xl text-sm bg-white outline-none font-sans"
+                          required
+                        />
+                      </div>
                     </div>
-                  ) : (
-                    <div>
-                      <p className="text-sm font-semibold text-gray-700">ড্র্যাগ অ্যান্ড ড্রপ করুন অথবা ক্লিক করুন</p>
-                      <p className="text-xs text-gray-400 mt-1">PDF ফাইল (সর্বোচ্চ ১৫ মেগাবাইট)</p>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-gray-600">এলাকার নাম / কোড</label>
+                      <div className="relative">
+                        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                          type="text"
+                          placeholder="এলাকার নাম লিখুন (যেমন: ৩৯০৮১৭ বা তারাগঞ্জ)"
+                          value={inputAreaName}
+                          onChange={(e) => setInputAreaName(e.target.value)}
+                          className="w-full pl-9 pr-3 py-2.5 border border-gray-200 focus:border-bd-green-600 focus:ring-1 focus:ring-bd-green-600 rounded-xl text-sm bg-white outline-none"
+                          required
+                        />
+                      </div>
                     </div>
-                  )}
+                  </div>
+
+                  <p className="text-xs text-gray-500 leading-relaxed mt-3.5 bg-white p-3 rounded-lg border border-gray-150">
+                    💡 <strong>গুগল ড্রাইভ ফোল্ডার সাপোর্ট:</strong> আপনি চাইলে একটি সম্পূর্ণ গুগল ড্রাইভ ফোল্ডারের লিংক সাবমিট করতে পারেন। আমাদের সিস্টেম ফোল্ডারের ভেতরের সকল সাবফোল্ডার এবং পিডিএফ ফাইলগুলো স্বয়ংক্রিয়ভাবে স্ক্যান করে সব এলাকার ভোটার তালিকা ব্যাকগ্রাউন্ডে প্রসেস করে যুক্ত করে নিবে। অনুগ্রহ করে নিশ্চিত করুন লিংকটি <strong>\"Anyone with the link can view\"</strong> করা আছে।
+                  </p>
                 </div>
-                {fileToUpload && (
+
+                <div className="flex justify-end pt-2">
                   <button
                     type="submit"
-                    disabled={isSubmitting}
-                    className="w-full py-2.5 bg-bd-green-600 hover:bg-bd-green-700 disabled:bg-gray-300 text-white font-bold rounded-xl text-sm transition-all shadow-sm"
+                    disabled={isSubmitting || !pdfUrl.trim() || !inputAreaName.trim()}
+                    className="px-6 py-3 bg-bd-green-600 hover:bg-bd-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold rounded-xl text-sm transition-all shadow-sm flex items-center gap-2 cursor-pointer"
                   >
-                    {isSubmitting ? "আপলোড হচ্ছে..." : "ফাইল প্রসেসিং শুরু করুন"}
+                    {isSubmitting ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        প্রসেস করা হচ্ছে...
+                      </>
+                    ) : (
+                      <>
+                        <Database className="w-4 h-4" />
+                        লিংক থেকে ভোটার তালিকা প্রসেস করুন
+                      </>
+                    )}
                   </button>
-                )}
-              </form>
-
-              {/* URL submit panel */}
-              <form onSubmit={handleUrlSubmit} className="space-y-3 flex flex-col justify-between">
-                <div>
-                  <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">পদ্ধতি ২: ওয়েব বা গুগল ড্রাইভ লিংক (PDF URL / Google Drive)</span>
-                  <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 mt-1.5 space-y-3">
-                    <div className="relative">
-                      <Link className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                      <input
-                        type="url"
-                        placeholder="https://drive.google.com/file/d/..."
-                        value={pdfUrl}
-                        onChange={(e) => setPdfUrl(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 border border-gray-200 focus:border-bd-green-600 rounded-lg text-sm bg-white outline-none font-sans"
-                      />
-                    </div>
-                    <div className="relative">
-                      <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                      <input
-                        type="text"
-                        placeholder="এলাকার নাম (যেমন: গুলশান, বনানী বা ধানমন্ডি)"
-                        value={inputAreaName}
-                        onChange={(e) => setInputAreaName(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 border border-gray-200 focus:border-bd-green-600 rounded-lg text-sm bg-white outline-none"
-                      />
-                    </div>
-                    <p className="text-xs text-gray-500 leading-normal">
-                      পাবলিক PDF ফাইলের সরাসরি লিংক অথবা <strong>গুগল ড্রাইভ শেয়ারিং লিংক (Google Drive share link)</strong> ও এলাকার নাম দিন। এলাকার নাম দিয়ে সাবমিট করলে এলাকার ভোটার তালিকা অটো প্রসেস হবে।
-                    </p>
-                  </div>
                 </div>
-                <button
-                  type="submit"
-                  disabled={isSubmitting || !pdfUrl.trim() || !inputAreaName.trim()}
-                  className="w-full py-2.5 bg-bd-green-600 hover:bg-bd-green-700 disabled:bg-gray-300 text-white font-bold rounded-xl text-sm transition-all shadow-sm mt-3 cursor-pointer"
-                >
-                  {isSubmitting ? "ডাউনলোড ও প্রসেস হচ্ছে..." : "লিংক থেকে প্রসেস করুন"}
-                </button>
               </form>
             </div>
 
