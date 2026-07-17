@@ -30,6 +30,16 @@ const PORT = 3000;
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
+// Standard Request Logger Middleware for console logs on live servers
+app.use((req, res, next) => {
+  const startTime = Date.now();
+  res.on("finish", () => {
+    const duration = Date.now() - startTime;
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl} - Status: ${res.statusCode} (${duration}ms)`);
+  });
+  next();
+});
+
 // Configure multer for PDF file uploads (in-memory)
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -85,8 +95,10 @@ app.get("/api/voters", async (req, res) => {
     
     const results = await searchVoters(query, field, area);
     
-    // Log search query for analytics
-    await logSearch(query, field, results.length);
+    // Log search query for analytics (non-blocking to prevent server-side IO bottlenecks or failures)
+    logSearch(query, field, results.length).catch(err => {
+      console.error(`[Error] Failed to log search analytics for query "${query}":`, err);
+    });
     
     res.json(results);
   } catch (err: any) {

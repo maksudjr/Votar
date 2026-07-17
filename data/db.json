@@ -1,0 +1,34 @@
+{
+  "voters": [],
+  "pdfs": [],
+  "analytics": [
+    {
+      "id": "e78ece9f-41c2-4ab6-8d58-6ef9d0435f84",
+      "query": "",
+      "searchField": "all",
+      "resultsCount": 0,
+      "timestamp": "2026-07-17T09:16:15.721Z"
+    },
+    {
+      "id": "2b183135-9faa-4ca6-b2fe-d6f4eb165cf6",
+      "query": "",
+      "searchField": "all",
+      "resultsCount": 0,
+      "timestamp": "2026-07-17T09:19:49.891Z"
+    },
+    {
+      "id": "8d37cfd5-75f1-4cd9-a2dd-55f4c77c5cc4",
+      "query": "",
+      "searchField": "all",
+      "resultsCount": 0,
+      "timestamp": "2026-07-17T09:19:58.488Z"
+    }
+  ],
+  "users": [
+    {
+      "id": "030616dd-3990-4112-9c73-f4a30e113265",
+      "username": "admin",
+      "passwordHash": "ac9689e2272427085e35b9d3e3e8bed88cb3434828b43b86fc0596cad4c6e270"
+    }
+  ]
+}

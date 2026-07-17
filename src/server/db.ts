@@ -96,15 +96,23 @@ export async function initDb(): Promise<void> {
   }
 }
 
+// Queue to serialize saveDb calls to prevent concurrent writes and file corruption
+let writeQueue: Promise<void> = Promise.resolve();
+
 // Persist current state to disk
 async function saveDb(): Promise<void> {
-  try {
-    await fs.mkdir(DB_DIR, { recursive: true });
-    await fs.writeFile(DB_FILE, JSON.stringify(dbInMemory, null, 2), "utf-8");
-  } catch (err) {
-    console.error("Failed to save database to disk:", err);
-    throw err;
-  }
+  return new Promise<void>((resolve, reject) => {
+    writeQueue = writeQueue.then(async () => {
+      try {
+        await fs.mkdir(DB_DIR, { recursive: true });
+        await fs.writeFile(DB_FILE, JSON.stringify(dbInMemory, null, 2), "utf-8");
+        resolve();
+      } catch (err) {
+        console.error("Failed to save database to disk:", err);
+        reject(err);
+      }
+    });
+  });
 }
 
 // ---------------------- ADMIN AUTH ----------------------
