@@ -13,15 +13,18 @@ import {
   FileSpreadsheet,
   Download,
   Database,
-  Heart
+  Heart,
+  CloudOff
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
+import { api, getIsOfflineMode } from "./lib/api";
 
 export default function App() {
   // App views
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [adminToken, setAdminToken] = useState<string | null>(localStorage.getItem("admin_token"));
   const [adminUsername, setAdminUsername] = useState<string | null>(localStorage.getItem("admin_username"));
+  const [isOffline, setIsOffline] = useState(getIsOfflineMode());
 
   // Search filter states
   const [searchQuery, setSearchQuery] = useState("");
@@ -47,10 +50,8 @@ export default function App() {
       }
 
       try {
-        const res = await fetch("/api/auth/me", {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        const data = await res.json();
+        const data = await api.verifySession(token);
+        setIsOffline(getIsOfflineMode());
         if (data.authenticated) {
           setAdminToken(token);
           setAdminUsername(data.username);
@@ -75,11 +76,9 @@ export default function App() {
   const fetchAreas = async () => {
     setIsLoadingAreas(true);
     try {
-      const res = await fetch("/api/voters/areas");
-      if (res.ok) {
-        const data = await res.json();
-        setAreas(data);
-      }
+      const data = await api.fetchAreas();
+      setAreas(data);
+      setIsOffline(getIsOfflineMode());
     } catch (err) {
       console.error("Failed to fetch areas", err);
     } finally {
@@ -91,16 +90,9 @@ export default function App() {
   const fetchVoters = async () => {
     setIsLoadingVoters(true);
     try {
-      const queryParams = new URLSearchParams({
-        q: searchQuery,
-        field: searchField,
-        area: selectedArea
-      });
-      const res = await fetch(`/api/voters?${queryParams}`);
-      if (res.ok) {
-        const data = await res.json();
-        setVoters(data);
-      }
+      const data = await api.fetchVoters(searchQuery, searchField, selectedArea);
+      setVoters(data);
+      setIsOffline(getIsOfflineMode());
     } catch (err) {
       console.error("Failed to fetch voters", err);
     } finally {
@@ -111,7 +103,7 @@ export default function App() {
   // Load initial list of voters and areas on mount
   useEffect(() => {
     fetchAreas();
-  }, []);
+  }, [isOffline]);
 
   // Re-fetch voters whenever search parameters change
   useEffect(() => {
@@ -120,7 +112,7 @@ export default function App() {
     }, 250); // 250ms debouncing for fast instant searching
 
     return () => clearTimeout(delayDebounceFn);
-  }, [searchQuery, searchField, selectedArea]);
+  }, [searchQuery, searchField, selectedArea, isOffline]);
 
   // Handle successful Admin Login
   const handleLoginSuccess = (token: string, username: string) => {
@@ -128,6 +120,7 @@ export default function App() {
     localStorage.setItem("admin_username", username);
     setAdminToken(token);
     setAdminUsername(username);
+    setIsOffline(getIsOfflineMode());
   };
 
   // Handle Admin Logout
@@ -135,10 +128,7 @@ export default function App() {
     const token = localStorage.getItem("admin_token");
     if (token) {
       try {
-        await fetch("/api/auth/logout", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        await api.logout(token);
       } catch (err) {
         console.error("Logout request failed", err);
       }
@@ -148,21 +138,16 @@ export default function App() {
     setAdminToken(null);
     setAdminUsername(null);
     setIsAdminMode(false);
+    setIsOffline(getIsOfflineMode());
   };
 
   // Handle edit voter on server
   const handleEditVoter = async (id: string, updated: Partial<Voter>): Promise<boolean> => {
     if (!adminToken) return false;
     try {
-      const res = await fetch(`/api/voters/${id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${adminToken}`
-        },
-        body: JSON.stringify(updated)
-      });
-      if (res.ok) {
+      const success = await api.editVoter(id, updated, adminToken);
+      setIsOffline(getIsOfflineMode());
+      if (success) {
         // Optimistically update frontend list
         setVoters((current) =>
           current.map((v) => (v.id === id ? { ...v, ...updated } : v))
@@ -170,8 +155,7 @@ export default function App() {
         fetchAreas(); // refresh unique areas
         return true;
       } else {
-        const data = await res.json();
-        alert(data.error || "সংশোধন ব্যর্থ হয়েছে।");
+        alert("সংশোধন ব্যর্থ হয়েছে।");
       }
     } catch (err) {
       alert("সার্ভার ত্রুটি। অনুগ্রহ করে আবার চেষ্টা করুন।");
@@ -183,18 +167,15 @@ export default function App() {
   const handleDeleteVoter = async (id: string): Promise<boolean> => {
     if (!adminToken) return false;
     try {
-      const res = await fetch(`/api/voters/${id}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${adminToken}` }
-      });
-      if (res.ok) {
+      const success = await api.deleteVoter(id, adminToken);
+      setIsOffline(getIsOfflineMode());
+      if (success) {
         // Remove from local list
         setVoters((current) => current.filter((v) => v.id !== id));
         fetchAreas(); // refresh unique areas
         return true;
       } else {
-        const data = await res.json();
-        alert(data.error || "মুছে ফেলা ব্যর্থ হয়েছে।");
+        alert("মুছে ফেলা ব্যর্থ হয়েছে।");
       }
     } catch (err) {
       alert("সার্ভার ত্রুটি। অনুগ্রহ করে আবার চেষ্টা করুন।");
@@ -328,22 +309,53 @@ export default function App() {
                     <div className="flex items-center gap-1.5">
                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0 mr-1 hidden md:inline">এক্সপোর্ট:</span>
                       <a
-                        href={`/api/voters/export?q=${encodeURIComponent(searchQuery)}&field=${searchField}&area=${encodeURIComponent(selectedArea)}&format=csv`}
+                        href={isOffline ? "#" : `/api/voters/export?q=${encodeURIComponent(searchQuery)}&field=${searchField}&area=${encodeURIComponent(selectedArea)}&format=csv`}
+                        onClick={(e) => {
+                          if (isOffline) {
+                            e.preventDefault();
+                            const blob = new Blob([JSON.stringify(voters, null, 2)], { type: "application/json" });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement("a");
+                            a.href = url;
+                            a.download = "voter_search_export.json";
+                            a.click();
+                          }
+                        }}
                         className="text-[11px] font-bold text-emerald-700 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 rounded border border-emerald-200 transition-colors flex items-center gap-1 shadow-2xs"
                       >
                         <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-                        CSV
+                        {isOffline ? "JSON" : "CSV"}
                       </a>
-                      <a
-                        href={`/api/voters/export?q=${encodeURIComponent(searchQuery)}&field=${searchField}&area=${encodeURIComponent(selectedArea)}&format=json`}
-                        className="text-[11px] font-bold text-blue-700 px-2.5 py-1 bg-blue-50 hover:bg-blue-100 rounded border border-blue-200 transition-colors flex items-center gap-1 shadow-2xs"
-                      >
-                        <Download className="w-3.5 h-3.5 text-blue-500" />
-                        JSON
-                      </a>
+                      {!isOffline && (
+                        <a
+                          href={`/api/voters/export?q=${encodeURIComponent(searchQuery)}&field=${searchField}&area=${encodeURIComponent(selectedArea)}&format=json`}
+                          className="text-[11px] font-bold text-blue-700 px-2.5 py-1 bg-blue-50 hover:bg-blue-100 rounded border border-blue-200 transition-colors flex items-center gap-1 shadow-2xs"
+                        >
+                          <Download className="w-3.5 h-3.5 text-blue-500" />
+                          JSON
+                        </a>
+                      )}
                     </div>
                   )}
                 </div>
+
+                {isOffline && (
+                  <div className="bg-amber-50 border-b border-amber-200 px-6 py-2.5 flex items-center gap-2.5 text-xs text-amber-800 shrink-0">
+                    <CloudOff className="w-4 h-4 text-amber-600 shrink-0 animate-pulse" />
+                    <span>
+                      সিস্টেমটি <strong>অফলাইন মোডে (Standalone)</strong> চলছে। সকল ভোটার তথ্য ও প্রসেসিং ব্রাউজারের লোকাল স্টোরেজে (localStorage) হচ্ছে।
+                    </span>
+                    <button
+                      onClick={() => {
+                        api.setIsOfflineMode(false);
+                        window.location.reload();
+                      }}
+                      className="ml-auto px-2.5 py-1 bg-white border border-amber-300 rounded font-bold text-[10px] hover:bg-amber-100 text-amber-700 transition-all cursor-pointer shadow-3xs"
+                    >
+                      সার্ভার পুনরায় চেষ্টা করুন (Retry Live Server)
+                    </button>
+                  </div>
+                )}
 
                 {/* Main Results Scroll Contain */}
                 <div className="flex-grow overflow-y-auto p-4 md:p-6 space-y-4">
@@ -435,18 +447,18 @@ export default function App() {
       <footer className="h-9 bg-slate-800 text-slate-400 px-6 flex items-center justify-between text-[10px] shrink-0 border-t border-slate-900 relative z-10 shadow-lg">
         <div className="flex items-center space-x-4">
           <span className="flex items-center font-medium">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 mr-2 animate-pulse"></span>
-            System Online (অনলাইন)
+            <span className={`w-2 h-2 rounded-full mr-2 animate-pulse ${isOffline ? "bg-amber-500" : "bg-emerald-500"}`}></span>
+            {isOffline ? "Standalone Mode (অফলাইন মোড)" : "System Online (অনলাইন)"}
           </span>
           <span className="hidden sm:inline text-slate-600">|</span>
-          <span className="hidden sm:inline font-mono">Platform: Node.js (React)</span>
+          <span className="hidden sm:inline font-mono">Platform: {isOffline ? "Client Storage (HTML5)" : "Node.js (React)"}</span>
           <span className="hidden md:inline text-slate-600">|</span>
           <span className="hidden md:inline">© {new Date().getFullYear()} Voter Search BD</span>
         </div>
         <div className="flex items-center space-x-3.5 text-slate-500">
           <span className="hidden lg:inline Bengali-font text-[9px]">গণপ্রজাতন্ত্রী বাংলাদেশ নির্বাচন কমিশন তথ্য ব্যবস্থা</span>
           <span className="hidden lg:inline">|</span>
-          <span className="text-emerald-500 font-bold uppercase tracking-tighter italic font-mono">v2.4.0-PROD</span>
+          <span className="text-emerald-500 font-bold uppercase tracking-tighter italic font-mono">{isOffline ? "v2.4.0-STANDALONE" : "v2.4.0-PROD"}</span>
         </div>
       </footer>
 

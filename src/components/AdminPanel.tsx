@@ -17,8 +17,10 @@ import {
   ChevronRight,
   Database,
   Eye,
-  KeyRound
+  KeyRound,
+  EyeOff
 } from "lucide-react";
+import { api, getGoogleDriveId } from "../lib/api";
 
 interface AdminPanelProps {
   token: string;
@@ -37,6 +39,7 @@ export default function AdminPanel({ token, onLogout, onRefreshAreas }: AdminPan
   const [pdfUrl, setPdfUrl] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+  const [previewDriveId, setPreviewDriveId] = useState<string | null>(null);
 
   // Analytics states
   const [stats, setStats] = useState<AnalyticsStats | null>(null);
@@ -60,13 +63,8 @@ export default function AdminPanel({ token, onLogout, onRefreshAreas }: AdminPan
   const fetchPdfs = async () => {
     setIsLoadingPdfs(true);
     try {
-      const res = await fetch("/api/pdfs", {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setPdfs(data.sort((a: PDFRecord, b: PDFRecord) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
-      }
+      const data = await api.fetchPdfs(token);
+      setPdfs(data.sort((a: PDFRecord, b: PDFRecord) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
     } catch (err) {
       console.error("Failed to fetch PDFs", err);
     } finally {
@@ -78,13 +76,8 @@ export default function AdminPanel({ token, onLogout, onRefreshAreas }: AdminPan
   const fetchStats = async () => {
     setIsLoadingStats(true);
     try {
-      const res = await fetch("/api/analytics", {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setStats(data);
-      }
+      const data = await api.fetchStats(token);
+      setStats(data);
     } catch (err) {
       console.error("Failed to fetch stats", err);
     } finally {
@@ -145,19 +138,11 @@ export default function AdminPanel({ token, onLogout, onRefreshAreas }: AdminPan
 
     setIsSubmitting(true);
     setPdfMsg({ text: "ফাইল আপলোড হচ্ছে এবং প্রসেসিং শুরু হয়েছে...", type: "info" });
-    
-    const formData = new FormData();
-    formData.append("file", fileToUpload);
 
     try {
-      const res = await fetch("/api/pdfs/upload", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData
-      });
-      const data = await res.json();
+      const data = await api.uploadPdf(fileToUpload, token);
       
-      if (res.ok || res.status === 202) {
+      if (data.success) {
         setPdfMsg({ text: "ফাইলটি সফলভাবে গৃহীত হয়েছে। এটি ব্যাকগ্রাউন্ডে প্রসেস করা হচ্ছে।", type: "success" });
         setFileToUpload(null);
         fetchPdfs();
@@ -180,18 +165,15 @@ export default function AdminPanel({ token, onLogout, onRefreshAreas }: AdminPan
     setPdfMsg({ text: "লিংক ডাউনলোড এবং প্রসেসিং শুরু হয়েছে...", type: "info" });
 
     try {
-      const res = await fetch("/api/pdfs/link", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({ url: pdfUrl })
-      });
-      const data = await res.json();
+      const data = await api.submitLink(pdfUrl, token);
       
-      if (res.ok || res.status === 202) {
+      if (data.success) {
         setPdfMsg({ text: "PDF লিংক গৃহীত হয়েছে। ব্যাকগ্রাউন্ডে ডাউনলোড ও প্রসেস শুরু হয়েছে।", type: "success" });
+        // Check if it was Google Drive URL, set previewDriveId automatically to display it instantly!
+        const driveId = getGoogleDriveId(pdfUrl);
+        if (driveId) {
+          setPreviewDriveId(driveId);
+        }
         setPdfUrl("");
         fetchPdfs();
       } else {
@@ -210,18 +192,14 @@ export default function AdminPanel({ token, onLogout, onRefreshAreas }: AdminPan
       return;
     }
     try {
-      const res = await fetch(`/api/pdfs/${id}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.ok) {
+      const success = await api.deletePdf(id, token);
+      if (success) {
         setPdfMsg({ text: "ফাইল এবং ভোটার তথ্য সফলভাবে মুছে ফেলা হয়েছে।", type: "success" });
         fetchPdfs();
         fetchStats();
         onRefreshAreas();
       } else {
-        const data = await res.json();
-        setPdfMsg({ text: data.error || "মুছে ফেলা ব্যর্থ হয়েছে।", type: "error" });
+        setPdfMsg({ text: "মুছে ফেলা ব্যর্থ হয়েছে।", type: "error" });
       }
     } catch (err) {
       setPdfMsg({ text: "সার্ভার সংযোগ ত্রুটি।", type: "error" });
@@ -232,16 +210,12 @@ export default function AdminPanel({ token, onLogout, onRefreshAreas }: AdminPan
   const handleReprocessPdf = async (id: string) => {
     setPdfMsg({ text: "পুনরায় প্রসেসিং শুরু হচ্ছে...", type: "info" });
     try {
-      const res = await fetch(`/api/pdfs/${id}/reprocess`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const data = await res.json();
-      if (res.ok) {
+      const success = await api.reprocessPdf(id, token);
+      if (success) {
         setPdfMsg({ text: "ব্যাকগ্রাউন্ডে পুনরায় প্রসেসিং শুরু হয়েছে।", type: "success" });
         fetchPdfs();
       } else {
-        setPdfMsg({ text: data.error || "পুনরায় প্রসেসিং ব্যর্থ হয়েছে।", type: "error" });
+        setPdfMsg({ text: "পুনরায় প্রসেসিং ব্যর্থ হয়েছে।", type: "error" });
       }
     } catch (err) {
       setPdfMsg({ text: "সার্ভার সংযোগ ত্রুটি।", type: "error" });
@@ -255,16 +229,8 @@ export default function AdminPanel({ token, onLogout, onRefreshAreas }: AdminPan
     setIsUpdatingPass(true);
 
     try {
-      const res = await fetch("/api/auth/change-password", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({ oldPassword, newPassword })
-      });
-      const data = await res.json();
-      if (res.ok) {
+      const data = await api.changePassword(oldPassword, newPassword, token);
+      if (data.success) {
         setSecurityMsg({ text: "পাসওয়ার্ড সফলভাবে পরিবর্তিত হয়েছে।", type: "success" });
         setOldPassword("");
         setNewPassword("");
@@ -286,17 +252,9 @@ export default function AdminPanel({ token, onLogout, onRefreshAreas }: AdminPan
     setIsRestoring(true);
     setBackupMsg({ text: "ডেটাবেস রিস্টোর করা হচ্ছে...", type: "info" });
 
-    const formData = new FormData();
-    formData.append("file", restoreFile);
-
     try {
-      const res = await fetch("/api/backup/restore", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData
-      });
-      const data = await res.json();
-      if (res.ok) {
+      const data = await api.restoreBackup(restoreFile, token);
+      if (data.success) {
         setBackupMsg({ text: "ডেটাবেস সফলভাবে রিস্টোর হয়েছে!", type: "success" });
         setRestoreFile(null);
         fetchPdfs();
@@ -484,29 +442,29 @@ export default function AdminPanel({ token, onLogout, onRefreshAreas }: AdminPan
               {/* URL submit panel */}
               <form onSubmit={handleUrlSubmit} className="space-y-3 flex flex-col justify-between">
                 <div>
-                  <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">পদ্ধতি ২: ওয়েব লিংক (PDF URL Link)</span>
+                  <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">পদ্ধতি ২: ওয়েব বা গুগল ড্রাইভ লিংক (PDF URL / Google Drive)</span>
                   <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 mt-1.5 space-y-3">
                     <div className="relative">
                       <Link className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                       <input
                         type="url"
-                        placeholder="https://example.com/voter_list.pdf"
+                        placeholder="https://drive.google.com/file/d/..."
                         value={pdfUrl}
                         onChange={(e) => setPdfUrl(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 border border-gray-200 focus:border-bd-green-600 rounded-lg text-sm bg-white outline-none"
+                        className="w-full pl-9 pr-3 py-2 border border-gray-200 focus:border-bd-green-600 rounded-lg text-sm bg-white outline-none font-sans"
                       />
                     </div>
                     <p className="text-xs text-gray-500 leading-normal">
-                      ওয়েবসাইট বা ক্লাউড স্টোরেজে হোস্ট করা পাবলিক PDF ফাইলের সরাসরি লিংক প্রদান করুন। সিস্টেম স্বয়ংক্রিয়ভাবে ডাউনলোড ও ডাটা এক্সট্র্যাক্ট করবে।
+                      পাবলিক PDF ফাইলের সরাসরি লিংক অথবা <strong>গুগল ড্রাইভ শেয়ারিং লিংক (Google Drive share link)</strong> দিন। সিস্টেম স্বয়ংক্রিয়ভাবে সরাসরি ডাউনলোড লিংক তৈরি করে ডেটা এক্সট্র্যাক্ট করবে।
                     </p>
                   </div>
                 </div>
                 <button
                   type="submit"
                   disabled={isSubmitting || !pdfUrl.trim()}
-                  className="w-full py-2.5 bg-bd-green-600 hover:bg-bd-green-700 disabled:bg-gray-300 text-white font-bold rounded-xl text-sm transition-all shadow-sm mt-3"
+                  className="w-full py-2.5 bg-bd-green-600 hover:bg-bd-green-700 disabled:bg-gray-300 text-white font-bold rounded-xl text-sm transition-all shadow-sm mt-3 cursor-pointer"
                 >
-                  {isSubmitting ? "ডাউনলোড হচ্ছে..." : "লিংক থেকে প্রসেস করুন"}
+                  {isSubmitting ? "ডাউনলোড ও প্রসেস হচ্ছে..." : "লিংক থেকে প্রসেস করুন"}
                 </button>
               </form>
             </div>
@@ -528,78 +486,128 @@ export default function AdminPanel({ token, onLogout, onRefreshAreas }: AdminPan
                 </div>
               ) : (
                 <div className="border border-gray-150 rounded-xl overflow-hidden divide-y divide-gray-100 max-h-[300px] overflow-y-auto">
-                  {pdfs.map((pdf) => (
-                    <div key={pdf.id} className="p-4 bg-white flex flex-col md:flex-row md:items-center md:justify-between gap-4 hover:bg-gray-50/50 transition-colors">
-                      <div className="flex items-start gap-3 min-w-0">
-                        <FileText className="w-5 h-5 text-gray-400 shrink-0 mt-0.5" />
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-gray-800 truncate" title={pdf.filename}>
-                            {pdf.filename}
-                          </p>
-                          <div className="flex flex-wrap items-center gap-2 text-xs text-gray-400 mt-0.5">
-                            <span className="font-mono">ID: {pdf.id.substring(0, 8)}</span>
-                            <span>•</span>
-                            <span className="capitalize">{pdf.sourceType === "link" ? "URL লিংক" : "ফাইল আপলোড"}</span>
-                            <span>•</span>
-                            <span>{new Date(pdf.createdAt).toLocaleString()}</span>
+                  {pdfs.map((pdf) => {
+                    const driveId = pdf.url ? getGoogleDriveId(pdf.url) : null;
+                    return (
+                      <div key={pdf.id} className="p-4 bg-white flex flex-col md:flex-row md:items-center md:justify-between gap-4 hover:bg-gray-50/50 transition-colors">
+                        <div className="flex items-start gap-3 min-w-0">
+                          <FileText className="w-5 h-5 text-gray-400 shrink-0 mt-0.5" />
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-gray-800 truncate" title={pdf.filename}>
+                              {pdf.filename}
+                            </p>
+                            <div className="flex flex-wrap items-center gap-2 text-xs text-gray-400 mt-0.5">
+                              <span className="font-mono">ID: {pdf.id.substring(0, 8)}</span>
+                              <span>•</span>
+                              <span className="capitalize">
+                                {pdf.sourceType === "link" ? (driveId ? "গুগল ড্রাইভ" : "URL লিংক") : "ফাইল আপলোড"}
+                              </span>
+                              <span>•</span>
+                              <span>{new Date(pdf.createdAt).toLocaleString()}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 shrink-0 self-end md:self-auto">
+                          {/* Status badges */}
+                          {pdf.status === "processing" && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-500/15 rounded-lg">
+                              <RefreshCw className="w-3 h-3 animate-spin" />
+                              প্রসেসিং হচ্ছে
+                            </span>
+                          )}
+                          {pdf.status === "success" && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-bd-green-50 text-bd-green-700 border border-bd-green-500/15 rounded-lg">
+                              <CheckCircle2 className="w-3 h-3 text-bd-green-600" />
+                              সফল ({pdf.votersCount} ভোটার)
+                            </span>
+                          )}
+                          {pdf.status === "error" && (
+                            <span
+                              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-red-50 text-red-700 border border-red-500/15 rounded-lg cursor-help relative group"
+                              title={pdf.errorMessage || "ব্যর্থতা কারণ"}
+                            >
+                              <XCircle className="w-3 h-3 text-red-600" />
+                              ব্যর্থ
+                              {/* Error tooltip */}
+                              <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block bg-gray-900 text-white text-[10px] p-2 rounded shadow-md w-48 z-10 text-center font-normal leading-normal">
+                                {pdf.errorMessage || "অজ্ঞাত ত্রুটি"}
+                              </span>
+                            </span>
+                          )}
+
+                          {/* Actions */}
+                          <div className="flex items-center gap-1.5">
+                            {driveId && (
+                              <button
+                                onClick={() => setPreviewDriveId(driveId)}
+                                className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-all"
+                                title="গুগল ড্রাইভ থেকে প্রিভিউ দেখুন"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            {pdf.sourceType === "link" && (
+                              <button
+                                onClick={() => handleReprocessPdf(pdf.id)}
+                                disabled={pdf.status === "processing"}
+                                className="p-1.5 text-gray-500 hover:text-bd-green-600 hover:bg-gray-100 rounded-lg transition-all"
+                                title="পুনরায় প্রসেস করুন"
+                              >
+                                <RefreshCw className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleDeletePdf(pdf.id, pdf.filename)}
+                              className="p-1.5 text-gray-500 hover:text-bd-red-600 hover:bg-gray-100 rounded-lg transition-all"
+                              title="ফাইল মুছে ফেলুন"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
                           </div>
                         </div>
                       </div>
-
-                      <div className="flex items-center gap-3 shrink-0 self-end md:self-auto">
-                        {/* Status badges */}
-                        {pdf.status === "processing" && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-500/15 rounded-lg">
-                            <RefreshCw className="w-3 h-3 animate-spin" />
-                            প্রসেসিং হচ্ছে
-                          </span>
-                        )}
-                        {pdf.status === "success" && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-bd-green-50 text-bd-green-700 border border-bd-green-500/15 rounded-lg">
-                            <CheckCircle2 className="w-3 h-3 text-bd-green-600" />
-                            সফল ({pdf.votersCount} ভোটার)
-                          </span>
-                        )}
-                        {pdf.status === "error" && (
-                          <span
-                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-red-50 text-red-700 border border-red-500/15 rounded-lg cursor-help relative group"
-                            title={pdf.errorMessage || "ব্যর্থতা কারণ"}
-                          >
-                            <XCircle className="w-3 h-3 text-red-600" />
-                            ব্যর্থ
-                            {/* Error tooltip */}
-                            <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block bg-gray-900 text-white text-[10px] p-2 rounded shadow-md w-48 z-10 text-center font-normal leading-normal">
-                              {pdf.errorMessage || "অজ্ঞাত ত্রুটি"}
-                            </span>
-                          </span>
-                        )}
-
-                        {/* Actions */}
-                        <div className="flex items-center gap-1.5">
-                          {pdf.sourceType === "link" && (
-                            <button
-                              onClick={() => handleReprocessPdf(pdf.id)}
-                              disabled={pdf.status === "processing"}
-                              className="p-1.5 text-gray-500 hover:text-bd-green-600 hover:bg-gray-100 rounded-lg transition-all"
-                              title="পুনরায় প্রসেস করুন"
-                            >
-                              <RefreshCw className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                          <button
-                            onClick={() => handleDeletePdf(pdf.id, pdf.filename)}
-                            className="p-1.5 text-gray-500 hover:text-bd-red-600 hover:bg-gray-100 rounded-lg transition-all"
-                            title="ফাইল মুছে ফেলুন"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
+
+            {/* Embedded Google Drive PDF Viewer Modal Overlay */}
+            {previewDriveId && (
+              <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+                <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden border border-slate-200">
+                  <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <FileText className="w-5 h-5 text-blue-600" />
+                      <h4 className="font-bold text-slate-800 text-sm md:text-base">গুগল ড্রাইভ ভোটার ফাইল ভিউ (Google Drive Preview)</h4>
+                    </div>
+                    <button
+                      onClick={() => setPreviewDriveId(null)}
+                      className="px-3 py-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-all"
+                    >
+                      বন্ধ করুন (Close)
+                    </button>
+                  </div>
+                  <div className="flex-1 bg-slate-100 relative">
+                    <iframe
+                      src={`https://drive.google.com/file/d/${previewDriveId}/preview`}
+                      className="w-full h-full border-0"
+                      allow="autoplay"
+                      title="Google Drive Document Viewer"
+                    />
+                  </div>
+                  <div className="bg-slate-50 px-6 py-3 border-t border-slate-200 flex justify-end">
+                    <button
+                      onClick={() => setPreviewDriveId(null)}
+                      className="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
+                    >
+                      ঠিক আছে (Done)
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

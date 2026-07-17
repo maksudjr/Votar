@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Lock, User, CheckCircle2, Shield, Eye, EyeOff } from "lucide-react";
+import { api } from "../lib/api";
 
 interface AdminLoginProps {
   onLoginSuccess: (token: string, username: string) => void;
@@ -18,14 +19,9 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
     setIsLoading(true);
 
     try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password })
-      });
-      const data = await res.json();
+      const data = await api.login(username, password);
       
-      if (res.ok && data.success) {
+      if (data.success) {
         onLoginSuccess(data.token, data.username);
       } else {
         setError(data.error || "ইউজারনেম বা পাসওয়ার্ড ভুল হয়েছে।");
