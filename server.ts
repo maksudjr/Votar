@@ -234,7 +234,7 @@ app.get("/api/pdfs", requireAdmin, async (req, res) => {
 });
 
 // Helper: Run background Gemini PDF extraction
-async function triggerPdfProcessing(pdfId: string, pdfBuffer: Buffer, originalName: string) {
+async function triggerPdfProcessing(pdfId: string, pdfBuffer: Buffer, originalName: string, areaName?: string) {
   try {
     console.log(`Starting background parsing for PDF ${pdfId}: ${originalName}`);
     const extractedVoters = await extractVotersFromPDF(pdfBuffer, originalName);
@@ -247,7 +247,7 @@ async function triggerPdfProcessing(pdfId: string, pdfBuffer: Buffer, originalNa
       voterNo: ev.voterNo || "",
       dob: ev.dob || "",
       address: ev.address || "",
-      area: ev.area || "Unknown Area",
+      area: areaName || ev.area || "Unknown Area",
       pdfId
     }));
 
@@ -287,9 +287,12 @@ app.post("/api/pdfs/upload", requireAdmin, upload.single("file"), async (req, re
 // 11. Admin PDF Link Submit
 app.post("/api/pdfs/link", requireAdmin, async (req, res) => {
   try {
-    const { url } = req.body;
+    const { url, areaName } = req.body;
     if (!url) {
       return res.status(400).json({ error: "PDF URL is required." });
+    }
+    if (!areaName) {
+      return res.status(400).json({ error: "Area Name is required." });
     }
     
     // Try to infer a nice filename from the URL
@@ -316,7 +319,7 @@ app.post("/api/pdfs/link", requireAdmin, async (req, res) => {
         const arrayBuffer = await response.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
         
-        await triggerPdfProcessing(record.id, buffer, filename);
+        await triggerPdfProcessing(record.id, buffer, filename, areaName);
       } catch (err: any) {
         console.error(`Link processing background error for ${record.id}:`, err);
         await updatePDFStatus(record.id, "error", 0, err.message || "Download failed");

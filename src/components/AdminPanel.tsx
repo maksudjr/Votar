@@ -18,7 +18,8 @@ import {
   Database,
   Eye,
   KeyRound,
-  EyeOff
+  EyeOff,
+  MapPin
 } from "lucide-react";
 import { api, getGoogleDriveId } from "../lib/api";
 
@@ -37,6 +38,7 @@ export default function AdminPanel({ token, onLogout, onRefreshAreas }: AdminPan
   const [isLoadingPdfs, setIsLoadingPdfs] = useState(false);
   const [fileToUpload, setFileToUpload] = useState<File | null>(null);
   const [pdfUrl, setPdfUrl] = useState("");
+  const [inputAreaName, setInputAreaName] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [previewDriveId, setPreviewDriveId] = useState<string | null>(null);
@@ -64,7 +66,25 @@ export default function AdminPanel({ token, onLogout, onRefreshAreas }: AdminPan
     setIsLoadingPdfs(true);
     try {
       const data = await api.fetchPdfs(token);
-      setPdfs(data.sort((a: PDFRecord, b: PDFRecord) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+      const sorted = data.sort((a: PDFRecord, b: PDFRecord) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      setPdfs(sorted);
+      
+      // Auto-preview the first available Google Drive PDF if none is active
+      if (sorted.length > 0) {
+        let foundDriveId = null;
+        for (const pdf of sorted) {
+          if (pdf.url) {
+            const driveId = getGoogleDriveId(pdf.url);
+            if (driveId) {
+              foundDriveId = driveId;
+              break;
+            }
+          }
+        }
+        if (foundDriveId) {
+          setPreviewDriveId(prev => prev || foundDriveId);
+        }
+      }
     } catch (err) {
       console.error("Failed to fetch PDFs", err);
     } finally {
@@ -160,12 +180,16 @@ export default function AdminPanel({ token, onLogout, onRefreshAreas }: AdminPan
   const handleUrlSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!pdfUrl.trim()) return;
+    if (!inputAreaName.trim()) {
+      setPdfMsg({ text: "অনুগ্রহ করে এলাকার নাম লিখুন।", type: "error" });
+      return;
+    }
 
     setIsSubmitting(true);
     setPdfMsg({ text: "লিংক ডাউনলোড এবং প্রসেসিং শুরু হয়েছে...", type: "info" });
 
     try {
-      const data = await api.submitLink(pdfUrl, token);
+      const data = await api.submitLink(pdfUrl, inputAreaName, token);
       
       if (data.success) {
         setPdfMsg({ text: "PDF লিংক গৃহীত হয়েছে। ব্যাকগ্রাউন্ডে ডাউনলোড ও প্রসেস শুরু হয়েছে।", type: "success" });
@@ -175,7 +199,9 @@ export default function AdminPanel({ token, onLogout, onRefreshAreas }: AdminPan
           setPreviewDriveId(driveId);
         }
         setPdfUrl("");
+        setInputAreaName("");
         fetchPdfs();
+        onRefreshAreas();
       } else {
         setPdfMsg({ text: data.error || "লিংক প্রসেসিং ব্যর্থ হয়েছে।", type: "error" });
       }
@@ -454,14 +480,24 @@ export default function AdminPanel({ token, onLogout, onRefreshAreas }: AdminPan
                         className="w-full pl-9 pr-3 py-2 border border-gray-200 focus:border-bd-green-600 rounded-lg text-sm bg-white outline-none font-sans"
                       />
                     </div>
+                    <div className="relative">
+                      <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input
+                        type="text"
+                        placeholder="এলাকার নাম (যেমন: গুলশান, বনানী বা ধানমন্ডি)"
+                        value={inputAreaName}
+                        onChange={(e) => setInputAreaName(e.target.value)}
+                        className="w-full pl-9 pr-3 py-2 border border-gray-200 focus:border-bd-green-600 rounded-lg text-sm bg-white outline-none"
+                      />
+                    </div>
                     <p className="text-xs text-gray-500 leading-normal">
-                      পাবলিক PDF ফাইলের সরাসরি লিংক অথবা <strong>গুগল ড্রাইভ শেয়ারিং লিংক (Google Drive share link)</strong> দিন। সিস্টেম স্বয়ংক্রিয়ভাবে সরাসরি ডাউনলোড লিংক তৈরি করে ডেটা এক্সট্র্যাক্ট করবে।
+                      পাবলিক PDF ফাইলের সরাসরি লিংক অথবা <strong>গুগল ড্রাইভ শেয়ারিং লিংক (Google Drive share link)</strong> ও এলাকার নাম দিন। এলাকার নাম দিয়ে সাবমিট করলে এলাকার ভোটার তালিকা অটো প্রসেস হবে।
                     </p>
                   </div>
                 </div>
                 <button
                   type="submit"
-                  disabled={isSubmitting || !pdfUrl.trim()}
+                  disabled={isSubmitting || !pdfUrl.trim() || !inputAreaName.trim()}
                   className="w-full py-2.5 bg-bd-green-600 hover:bg-bd-green-700 disabled:bg-gray-300 text-white font-bold rounded-xl text-sm transition-all shadow-sm mt-3 cursor-pointer"
                 >
                   {isSubmitting ? "ডাউনলোড ও প্রসেস হচ্ছে..." : "লিংক থেকে প্রসেস করুন"}
